@@ -1,10 +1,18 @@
 package com.automation.selenium.cucumber.core;
 
+import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+import org.apache.commons.codec.binary.Hex;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebDriver;
@@ -17,6 +25,7 @@ import org.openqa.selenium.ie.InternetExplorerOptions;
 import org.openqa.selenium.remote.DesiredCapabilities;
 import org.openqa.selenium.remote.LocalFileDetector;
 import org.openqa.selenium.remote.RemoteWebDriver;
+import org.openqa.selenium.remote.SessionId;
 
 import com.automation.selenium.cucumber.core.utility.Constants;
 import com.automation.selenium.cucumber.core.utility.ScenarioContext;
@@ -66,6 +75,9 @@ public class StepBase {
 			if (!"false".equals(local)) {
 				ChromeDriver cd = new ChromeDriver(options);
 				return cd;
+			} else {
+				caps.setCapability("browserName", "Chrome");
+		    	caps.setCapability("version", "73.0");
 			}
 		} else if (browser != null && browser.startsWith("ie")) {
 			InternetExplorerOptions options = new InternetExplorerOptions();
@@ -73,6 +85,13 @@ public class StepBase {
 			if (!"false".equals(local)) {
 				InternetExplorerDriver ied = new InternetExplorerDriver(options);
 				return ied;
+			} else {
+				String versionNumber = "11.0";
+	    		if (!browser.replaceAll("[^0-9.]+", "").isEmpty()) {
+	    			versionNumber = browser.replaceAll("[^0-9.]+", "");
+	    		}
+	    		
+	    		caps.setCapability("version", versionNumber);
 			}
 		} else {
 			FirefoxOptions options = new FirefoxOptions();
@@ -80,15 +99,68 @@ public class StepBase {
 			if (!"false".equals(local)) {
 				FirefoxDriver ffd = new FirefoxDriver(options);
 				return ffd;
-			} 
+			} else {
+				caps.setCapability("version", "66.0");
+			}
 
 		}
 
 		if ("false".equals(local)) {
 			try {
+				String sauceUser = System.getProperty(Constants.SAUCE_USER);
+			    String sauceAccessKey = System.getProperty(Constants.SAUCE_ACCESS_KEY);
+			    
+			    String hubURL = "http://localhost:4444/wd/hub";
+			    
+			    boolean isSauce = false;
+			    
+			    if ((sauceUser != null && !sauceUser.isEmpty()) ||
+		    			(sauceAccessKey != null && !sauceAccessKey.isEmpty())) {
+			    	isSauce = true;
+			    	getScenarioContext().getScenario().write("Running in Sauce");
+			    	
+			    	hubURL = "http://ondemand.saucelabs.com:80/wd/hub";
+			    	
+			    	caps.setCapability("username", sauceUser);
+			        caps.setCapability("accessKey", sauceAccessKey);
+
+			        caps.setCapability("maxDuration", 3600);
+			        caps.setCapability("commandTimeout", 600);
+			        caps.setCapability("idleTimeout", 1000);
+
+			    	caps.setCapability("platform", "Windows 10");
+			    	
+			    	caps.setCapability("build", System.getProperty(Constants.SAUCE_BUILD));
+			    	
+			    	caps.setCapability("project", "Selenium Automation");
+			    	caps.setCapability("name", getScenarioContext().getScenario().getName());
+			    	
+			    }
+				
 				RemoteWebDriver driver = new RemoteWebDriver(new URL(
-						"http://{GRID_IP}:4444/wd/hub"), caps);
+						hubURL), caps);
 				driver.setFileDetector(new LocalFileDetector());
+				
+				if (isSauce) {
+		    		SessionId sessionId = driver.getSessionId();
+		    		String authKey = sauceUser + ":" + sauceAccessKey;
+		    		getScenarioContext().getScenario().write("SessionID: " + sessionId.toString());
+		    		
+					try {
+						SecretKeySpec sk = new SecretKeySpec(authKey.getBytes(), "HMACMD5"); 
+			            Mac mac = Mac.getInstance("HmacMD5");
+						mac.init(sk);
+						byte[] result = mac.doFinal(sessionId.toString().getBytes());
+						byte[] hexBytes = new Hex().encode(result); 
+				        authKey = new String(hexBytes, "ISO-8859-1"); 
+					} catch (NoSuchAlgorithmException | InvalidKeyException | UnsupportedEncodingException e) {
+						e.printStackTrace();
+					}
+					getScenarioContext().getScenario().embed(
+							("<a href=\"https://saucelabs.com/jobs/" + sessionId.toString() + "?auth=" + authKey + "\">Sauce Run</a>").getBytes(),
+							"text/html");
+		    	}
+				
 				return driver;
 			} catch (MalformedURLException e) {
 
@@ -122,6 +194,11 @@ public class StepBase {
         		 ((TakesScreenshot)getDriver())
         		 .getScreenshotAs(OutputType.BYTES), "image/png");
         }
+		
+		if (System.getProperty(Constants.SAUCE_USER) != null && !System.getProperty(Constants.SAUCE_USER).equals("")) {
+			((JavascriptExecutor)getDriver()).executeScript("sauce:job-result=" + (!scenario.isFailed() ? "passed" : "failed"));
+	        
+		}
 		
 		getScenarioContext().getDriver().close();
 		getScenarioContext().getDriver().quit();
