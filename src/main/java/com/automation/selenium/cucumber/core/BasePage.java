@@ -55,6 +55,12 @@ public abstract class BasePage {
 		
 	}
 	
+	protected String getText(WebElement element) {
+		waitForClickable(element);
+		log("Getting text for", element);
+		return element.getText();
+	}
+	
 	protected void click(WebElement element) {
 		waitForClickable(element);
 		log("Clicking on", element);
@@ -139,6 +145,10 @@ public abstract class BasePage {
 	protected void waitForVisible(WebElement element) {
 		wait.until(ExpectedConditions.visibilityOf(element));
 	}
+	
+	protected void waitForText(WebElement element, String text) {
+		wait.until(ExpectedConditions.textToBePresentInElement(element, text));
+	}
 
 	protected void waitForClickable(WebElement element) {
 		wait.until(ExpectedConditions.elementToBeClickable(element));
@@ -202,5 +212,14 @@ public abstract class BasePage {
 		}
 		
 		return name;
+	}
+	
+	protected void sleep(int seconds) {
+
+		try {
+			Thread.sleep(seconds * 1000);
+		} catch (Exception e) {
+
+		}
 	}
 }

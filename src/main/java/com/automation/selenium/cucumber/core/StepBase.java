@@ -73,6 +73,7 @@ public class StepBase {
 			ChromeOptions options = new ChromeOptions();
 			caps = new DesiredCapabilities(options);
 			if (!"false".equals(local)) {
+				
 				ChromeDriver cd = new ChromeDriver(options);
 				return cd;
 			} else {
